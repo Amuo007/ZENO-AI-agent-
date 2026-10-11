@@ -18,6 +18,7 @@ import {
   Brain,
   Check,
   ChevronRight,
+  Info,
   Loader2,
   LogOut,
   Mic,
@@ -30,6 +31,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import About from './About'
 import { ACTIVE_STATUSES, api, type Bit, type BitsOverview, type Question } from './api'
 import { useAuth } from './auth'
 import { BitAvatar, VoiceWave, ZenoAvatar, type Mood } from './Avatar'
@@ -43,7 +45,7 @@ import { LiveElapsed } from './LiveElapsed'
 import { buttonClass, Card, CardTitle, errorMessage, Pill, Segmented, StatusDot, toolLabel } from './ui'
 import { usePolling } from './usePolling'
 
-type Tab = 'talk' | 'bits' | 'memory' | 'apps' | 'settings'
+type Tab = 'talk' | 'bits' | 'memory' | 'apps' | 'settings' | 'about'
 
 const TABS: { id: Tab; label: string; icon: typeof Mic }[] = [
   { id: 'talk', label: 'Talk', icon: AudioLines },
@@ -51,6 +53,7 @@ const TABS: { id: Tab; label: string; icon: typeof Mic }[] = [
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'apps', label: 'Apps', icon: Blocks },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
+  { id: 'about', label: 'About', icon: Info },
 ]
 
 function initialTab(): Tab {
@@ -106,6 +109,7 @@ export default function App() {
         {tab === 'memory' && <MemoryPage />}
         {tab === 'apps' && <Store />}
         {tab === 'settings' && <SettingsPage />}
+        {tab === 'about' && <About />}
       </main>
 
       {/* Phone-sized screens get an iOS-style tab bar instead of the header control. */}
