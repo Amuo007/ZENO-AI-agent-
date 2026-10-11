@@ -168,6 +168,23 @@ async def preview(voice_id: str) -> bytes | None:
     return response.content
 
 
+def _rejection(response: httpx.Response) -> str:
+    """Why ElevenLabs refused a request, in words the dashboard can show."""
+    try:
+        detail = response.json().get("detail") or {}
+    except ValueError:
+        detail = {}
+    message = detail.get("message") if isinstance(detail, dict) else str(detail)
+    if isinstance(detail, dict) and detail.get("status") == "missing_permissions":
+        return (
+            f"{message} In ElevenLabs, edit the key and allow Voices (read), Text to Speech and "
+            "Speech to Text, or turn off \"Restrict key\"."
+        )
+    if response.status_code == 401:
+        return message or "The API key was rejected."
+    return message or f"ElevenLabs answered HTTP {response.status_code}."
+
+
 async def test(api_key: str | None = None) -> dict:
     """Check a key (or the saved one) by listing its voices."""
     key = api_key or config().api_key
@@ -176,8 +193,7 @@ async def test(api_key: str | None = None) -> dict:
     try:
         voices = await _fetch_voices(key)
     except httpx.HTTPStatusError as e:
-        detail = "The API key was rejected" if e.response.status_code == 401 else f"HTTP {e.response.status_code}"
-        return {"ok": False, "detail": detail}
+        return {"ok": False, "detail": _rejection(e.response)}
     except Exception as e:
         return {"ok": False, "detail": str(e)}
     return {"ok": True, "detail": f"Connected: {len(voices)} voices available"}
