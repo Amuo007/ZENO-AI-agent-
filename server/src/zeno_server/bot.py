@@ -113,6 +113,9 @@ Your memory:
 # Messages added to the conversation that aren't the user's words (Bit news, reminders).
 NOTE_PREFIXES = ("[Bit ", "[Reminder]", "[Note]")
 APP_TOOL_TIMEOUT = 120
+# A session whose app never finishes connecting (it closed, or the network blocked it) ends
+# after this long instead of waiting forever.
+CONNECT_TIMEOUT = 30
 # Tools that answer instantly, so no "one moment" is spoken for them.
 QUICK_TOOLS = {
     "get_current_time", "start_bit", "message_bit", "bit_status", "stop_bit",
@@ -511,9 +514,12 @@ async def run_bot(webrtc_connection: SmallWebRTCConnection, user: dict):
         if filler:
             await tts.queue_frame(TTSSpeakFrame(filler, append_to_context=False))
 
+    connected = asyncio.Event()
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected")
+        connected.set()
         await worker.queue_frames([TTSSpeakFrame(_greeting(user, questions))])
 
     @transport.event_handler("on_client_disconnected")
@@ -521,9 +527,18 @@ async def run_bot(webrtc_connection: SmallWebRTCConnection, user: dict):
         logger.info("Client disconnected")
         await runner.cancel()
 
+    async def end_if_never_connected():
+        try:
+            await asyncio.wait_for(connected.wait(), CONNECT_TIMEOUT)
+        except asyncio.TimeoutError:
+            logger.warning(f"The app didn't connect within {CONNECT_TIMEOUT}s; ending the session")
+            await runner.cancel()
+
+    watchdog = asyncio.create_task(end_if_never_connected())
     try:
         await runner.run()
     finally:
+        watchdog.cancel()
         unsubscribe()
         messages = _spoken_messages(context)
         db.end_conversation(conversation_id, messages)
