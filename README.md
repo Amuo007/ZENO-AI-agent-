@@ -29,7 +29,8 @@ in its own sandbox while ZENO keeps talking with you, and reports back when it's
 ## How it works
 
 **ZENO** (`server/src/zeno_server/bot.py`) is a Pipecat voice pipeline: Silero VAD → Whisper →
-LLM → Kokoro/Pocket TTS, over WebRTC. ZENO does quick things itself (one lookup in an app, sending an
+LLM → Kokoro/Pocket TTS, over WebRTC. With an ElevenLabs key (Settings → Voice), ZENO can speak
+with ElevenLabs voices and listen with ElevenLabs Scribe instead. ZENO does quick things itself (one lookup in an app, sending an
 email) and hands everything else to a Bit with `start_bit`: attachments and files, research,
 multi-step work, and anything about later ("remind me", "let me know when", "keep an eye on").
 App lookups run in the background, so the conversation never stops.

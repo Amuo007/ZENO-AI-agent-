@@ -1,4 +1,5 @@
-"""Speech-to-text: MLX Whisper on Apple silicon, faster-whisper everywhere else (e.g. a Linux VM)."""
+"""Speech-to-text: MLX Whisper on Apple silicon, faster-whisper everywhere else (e.g. a Linux VM),
+or ElevenLabs' realtime Scribe when it's turned on (see elevenlabs.py)."""
 
 import numpy as np
 from loguru import logger
@@ -6,6 +7,7 @@ from loguru import logger
 from pipecat.services.stt_service import STTService
 from pipecat.services.whisper.stt import WhisperSTTService
 
+from zeno_server import elevenlabs
 from zeno_server.config import settings
 
 
@@ -25,11 +27,20 @@ class _SharedFasterWhisper(WhisperSTTService):
         self._model = self._models[key]
 
 
+def engine() -> str:
+    """The speech-to-text in use: "elevenlabs", "mlx" or "faster-whisper"."""
+    return "elevenlabs" if elevenlabs.listening() else settings.stt
+
+
 def model_name() -> str:
+    if elevenlabs.listening():
+        return "Scribe (realtime)"
     return settings.whisper_model if settings.stt == "mlx" else settings.faster_whisper_model
 
 
 def create_stt() -> STTService:
+    if elevenlabs.listening():
+        return elevenlabs.create_stt()
     if settings.stt == "mlx":
         from pipecat.services.whisper.stt import WhisperSTTServiceMLX
 

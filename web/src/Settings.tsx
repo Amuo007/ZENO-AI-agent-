@@ -17,11 +17,14 @@ import {
   StatusDot,
 } from './ui'
 import { useHealth, type Health } from './useHealth'
+import VoiceEngine from './VoiceEngine'
 import VoicePicker from './VoicePicker'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<ModelSettings | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bumped when the voice engine changes, so the voice picker reloads its list.
+  const [voicesVersion, setVoicesVersion] = useState(0)
 
   async function load() {
     try {
@@ -76,7 +79,10 @@ export default function SettingsPage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <section>
           <SectionTitle>Voice</SectionTitle>
-          <VoicePicker />
+          <div className="flex flex-col gap-4">
+            <VoicePicker key={voicesVersion} />
+            <VoiceEngine onSaved={() => setVoicesVersion((v) => v + 1)} />
+          </div>
         </section>
         <section>
           <SectionTitle>Appearance</SectionTitle>

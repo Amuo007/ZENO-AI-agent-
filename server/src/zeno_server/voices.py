@@ -1,7 +1,9 @@
-"""ZENO's selectable voices: Kokoro and Pocket TTS, both running locally on the server.
+"""ZENO's selectable voices: Kokoro and Pocket TTS running locally on the server, plus the
+ElevenLabs account's voices when an ElevenLabs key is set (see elevenlabs.py).
 
-A voice id is "<engine>:<voice>", e.g. "kokoro:af_heart" or "pocket:alba". Each engine's model is
-loaded once and shared by every session, since loading it per session costs seconds.
+A voice id is "<engine>:<voice>", e.g. "kokoro:af_heart", "pocket:alba" or
+"elevenlabs:<voice id>". Each local engine's model is loaded once and shared by every session,
+since loading it per session costs seconds.
 """
 
 import asyncio
@@ -20,6 +22,7 @@ from pipecat.services.tts_service import TTSService
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 
+from zeno_server import elevenlabs
 from zeno_server.config import settings
 
 KOKORO_MODEL = str(KOKORO_CACHE_DIR / "kokoro-v1.0.onnx")
@@ -113,7 +116,18 @@ def list_voices() -> list[dict]:
 
 
 def is_voice(voice_id: str) -> bool:
+    """Whether it's one of the local voices."""
     return any(v["id"] == voice_id for v in list_voices())
+
+
+async def all_voices() -> list[dict]:
+    """Every voice to choose from: the local ones, then ElevenLabs' if a key is set."""
+    cloud = [{k: v for k, v in voice.items() if k != "preview_url"} for voice in await elevenlabs.list_voices()]
+    return list_voices() + cloud
+
+
+async def find_voice(voice_id: str) -> dict | None:
+    return next((v for v in await all_voices() if v["id"] == voice_id), None)
 
 
 def _split(voice_id: str) -> tuple[str, str]:
@@ -128,9 +142,11 @@ def _split(voice_id: str) -> tuple[str, str]:
 
 def create_tts(voice_id: str | None) -> TTSService:
     """The TTS service for a voice session."""
-    engine, name = _split(voice_id or DEFAULT_VOICE)
     # Strip any markdown the model still writes, so the voice never reads out symbols.
     text_filters = [MarkdownTextFilter()]
+    if voice_id and voice_id.startswith("elevenlabs:") and elevenlabs.enabled():
+        return elevenlabs.create_tts(voice_id.split(":", 1)[1], text_filters)
+    engine, name = _split(voice_id or DEFAULT_VOICE)
     if engine == "pocket":
         return PocketTTSService(
             settings=PocketTTSService.Settings(voice=name), text_filters=text_filters
@@ -158,8 +174,18 @@ def _synthesize(voice_id: str, text: str) -> tuple[np.ndarray, int]:
 _samples: dict[str, bytes] = {}
 
 
+async def sample(voice_id: str) -> tuple[bytes, str] | None:
+    """A short sample of the voice and its media type, for previews in the apps."""
+    if voice_id.startswith("elevenlabs:"):
+        audio = await elevenlabs.preview(voice_id)
+        return (audio, "audio/mpeg") if audio else None
+    if not is_voice(voice_id):
+        return None
+    return await sample_wav(voice_id), "audio/wav"
+
+
 async def sample_wav(voice_id: str) -> bytes:
-    """A short WAV of the voice, for previews in the apps."""
+    """A short WAV of a local voice."""
     if voice_id not in _samples:
         audio, rate = await asyncio.to_thread(_synthesize, voice_id, SAMPLE_TEXT)
         buffer = io.BytesIO()

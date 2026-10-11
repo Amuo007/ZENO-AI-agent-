@@ -22,7 +22,9 @@ from pipecat.transports.smallwebrtc.request_handler import (
     SmallWebRTCRequestHandler,
 )
 
-from zeno_server import auth, bits, connectors, db, gateway, ice, llm, sandbox, speech, voices
+from zeno_server import (
+    auth, bits, connectors, db, elevenlabs, gateway, ice, llm, sandbox, speech, voices,
+)
 from zeno_server.auth import current_user
 from zeno_server.bot import run_bot, warm_up_models
 from zeno_server.config import SERVER_DIR, settings
@@ -181,8 +183,8 @@ async def health(user: dict = Depends(current_user)):
             "model": zeno.model,
             "reachable": llm_ok,
         },
-        "stt": {"engine": settings.stt, "model": speech.model_name()},
-        "tts": _tts_status(user),
+        "stt": {"engine": speech.engine(), "model": speech.model_name()},
+        "tts": await _tts_status(user),
         "vad": "silero",
         "transport": "smallwebrtc",
         "bits": {
@@ -590,24 +592,25 @@ class ChooseVoice(BaseModel):
     voice: str
 
 
-def _selected_voice(user: dict) -> str:
-    voice = user.get("voice")
-    return voice if voice and voices.is_voice(voice) else voices.DEFAULT_VOICE
+async def _selected_voice(user: dict) -> dict:
+    """The user's voice, or the default one if it's gone (e.g. ElevenLabs was turned off)."""
+    voice = await voices.find_voice(user.get("voice") or "") if user.get("voice") else None
+    return voice or await voices.find_voice(voices.DEFAULT_VOICE)
 
 
-def _tts_status(user: dict) -> dict:
-    voice = next(v for v in voices.list_voices() if v["id"] == _selected_voice(user))
+async def _tts_status(user: dict) -> dict:
+    voice = await _selected_voice(user)
     return {"engine": voice["engine"].lower(), "voice": voice["name"]}
 
 
 @app.get("/api/voices")
 async def list_voices(user: dict = Depends(current_user)):
-    return {"selected": _selected_voice(user), "voices": voices.list_voices()}
+    return {"selected": (await _selected_voice(user))["id"], "voices": await voices.all_voices()}
 
 
 @app.put("/api/voice")
 async def choose_voice(body: ChooseVoice, user: dict = Depends(current_user)):
-    if not voices.is_voice(body.voice):
+    if not await voices.find_voice(body.voice):
         raise HTTPException(400, "Unknown voice")
     db.set_voice(user["id"], body.voice)
     return {"selected": body.voice}
@@ -615,9 +618,45 @@ async def choose_voice(body: ChooseVoice, user: dict = Depends(current_user)):
 
 @app.get("/api/voices/{voice_id}/sample")
 async def voice_sample(voice_id: str, user: dict = Depends(current_user)):
-    if not voices.is_voice(voice_id):
+    try:
+        found = await voices.sample(voice_id)
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Couldn't fetch the sample: {e}")
+    if not found:
         raise HTTPException(404, "Unknown voice")
-    return Response(await voices.sample_wav(voice_id), media_type="audio/wav")
+    audio, media_type = found
+    return Response(audio, media_type=media_type)
+
+
+class VoiceEngineIn(BaseModel):
+    # None keeps the saved key; "" removes it.
+    api_key: str | None = Field(default=None, max_length=500)
+    tts_model: str = elevenlabs.DEFAULT_TTS_MODEL
+    listen: bool = False
+
+
+@app.get("/api/voice-engine")
+async def voice_engine(user: dict = Depends(current_user)):
+    """The ElevenLabs settings (without the key), and whether this user may change them."""
+    return {**elevenlabs.public(), "admin": auth.is_admin(user)}
+
+
+@app.put("/api/voice-engine")
+async def save_voice_engine(body: VoiceEngineIn, user: dict = Depends(auth.admin_user)):
+    try:
+        elevenlabs.save(api_key=body.api_key, tts_model=body.tts_model, listen=body.listen)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {**elevenlabs.public(), "admin": True}
+
+
+class VoiceEngineTest(BaseModel):
+    api_key: str | None = Field(default=None, max_length=500)
+
+
+@app.post("/api/voice-engine/test")
+async def test_voice_engine(body: VoiceEngineTest, user: dict = Depends(auth.admin_user)):
+    return await elevenlabs.test(body.api_key or None)
 
 
 # --- MCP store ---------------------------------------------------------------------------------

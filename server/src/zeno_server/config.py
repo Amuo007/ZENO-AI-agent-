@@ -87,6 +87,9 @@ class Settings:
     faster_whisper_device: str = os.getenv("FASTER_WHISPER_DEVICE", "auto")
     faster_whisper_compute_type: str = os.getenv("FASTER_WHISPER_COMPUTE_TYPE", "int8")
     kokoro_voice: str = os.getenv("KOKORO_VOICE", "af_heart")
+    # ElevenLabs (optional, also settable on the dashboard): cloud voices, and Scribe for listening.
+    elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
+    elevenlabs_listen: bool = os.getenv("ELEVENLABS_LISTEN", "").lower() in ("1", "true", "yes")
 
     # Pipedream Connect: OAuth + MCP access to Outlook, Gmail and calendars.
     pipedream_client_id: str = os.getenv("PIPEDREAM_CLIENT_ID", "")
