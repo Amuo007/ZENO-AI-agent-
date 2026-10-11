@@ -3,6 +3,8 @@ import { AudioLines, Check, ExternalLink, Loader2 } from 'lucide-react'
 import { api, send } from './api'
 import { buttonClass, Card, errorMessage, inputClass, Pill, Switch } from './ui'
 
+type Tuning = { speed: number; stability: number; similarity: number; style: number }
+
 type VoiceEngineSettings = {
   has_key: boolean
   key_hint: string | null
@@ -11,6 +13,15 @@ type VoiceEngineSettings = {
   from_env: boolean
   admin: boolean
   models: { id: string; label: string }[]
+  tuning: Tuning
+  tuning_ranges: Record<keyof Tuning, { min: number; max: number; default: number }>
+}
+
+const TUNING_LABELS: Record<keyof Tuning, { label: string; low: string; high: string; format: (v: number) => string }> = {
+  speed: { label: 'Speed', low: 'Slower', high: 'Faster', format: (v) => `${v.toFixed(2)}×` },
+  stability: { label: 'Stability', low: 'More emotion', high: 'Steadier', format: (v) => `${Math.round(v * 100)}%` },
+  similarity: { label: 'Similarity', low: 'Looser', high: 'Closer to the voice', format: (v) => `${Math.round(v * 100)}%` },
+  style: { label: 'Style', low: 'Plain', high: 'Expressive', format: (v) => `${Math.round(v * 100)}%` },
 }
 
 /**
@@ -22,6 +33,7 @@ export default function VoiceEngine({ onSaved }: { onSaved: () => void }) {
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
   const [listen, setListen] = useState(false)
+  const [tuning, setTuning] = useState<Tuning | null>(null)
   const [busy, setBusy] = useState<'test' | 'save' | 'remove' | null>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
 
@@ -29,6 +41,7 @@ export default function VoiceEngine({ onSaved }: { onSaved: () => void }) {
     setSaved(settings)
     setModel(settings.tts_model)
     setListen(settings.listen)
+    setTuning(settings.tuning)
     setApiKey('')
   }
 
@@ -47,7 +60,11 @@ export default function VoiceEngine({ onSaved }: { onSaved: () => void }) {
   }
 
   const readOnly = !saved.admin
-  const changed = apiKey !== '' || model !== saved.tts_model || listen !== saved.listen
+  const tuningChanged = JSON.stringify(tuning) !== JSON.stringify(saved.tuning)
+  const changed = apiKey !== '' || model !== saved.tts_model || listen !== saved.listen || tuningChanged
+  const defaults = Object.fromEntries(
+    Object.entries(saved.tuning_ranges).map(([name, range]) => [name, range.default]),
+  ) as Tuning
 
   async function test() {
     setBusy('test')
@@ -66,7 +83,7 @@ export default function VoiceEngine({ onSaved }: { onSaved: () => void }) {
     setBusy(removeKey ? 'remove' : 'save')
     setMessage(null)
     try {
-      const body = { api_key: removeKey ? '' : apiKey || null, tts_model: model, listen: removeKey ? false : listen }
+      const body = { api_key: removeKey ? '' : apiKey || null, tts_model: model, listen: removeKey ? false : listen, tuning }
       const settings = await api<VoiceEngineSettings>('/voice-engine', send('PUT', body))
       load(settings)
       setMessage({
@@ -157,6 +174,47 @@ export default function VoiceEngine({ onSaved }: { onSaved: () => void }) {
             ))}
           </div>
         </div>
+
+        {tuning && (
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[13px] font-medium">How the voice sounds</span>
+              {JSON.stringify(tuning) !== JSON.stringify(defaults) && (
+                <button type="button" onClick={() => setTuning(defaults)} className="text-xs text-muted hover:text-ink">
+                  Reset
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 rounded-2xl bg-raised/60 p-3.5">
+              {(Object.keys(TUNING_LABELS) as (keyof Tuning)[]).map((name) => {
+                const range = saved.tuning_ranges[name]
+                const text = TUNING_LABELS[name]
+                return (
+                  <label key={name} className="block">
+                    <span className="flex items-baseline justify-between text-[13px]">
+                      <span>{text.label}</span>
+                      <span className="font-mono text-xs tabular-nums text-muted">{text.format(tuning[name])}</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={range.min}
+                      max={range.max}
+                      step={0.05}
+                      value={tuning[name]}
+                      onChange={(e) => setTuning({ ...tuning, [name]: Number(e.target.value) })}
+                      className="mt-1 w-full accent-[var(--color-ink)]"
+                    />
+                    <span className="flex justify-between text-[11px] text-faint">
+                      <span>{text.low}</span>
+                      <span>{text.high}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+            <p className="mt-1.5 text-xs text-muted">After saving, ▶ in the voice picker plays the voice with these settings.</p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-4">
           <div>

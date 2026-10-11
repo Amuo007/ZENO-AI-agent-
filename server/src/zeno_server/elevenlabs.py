@@ -33,6 +33,16 @@ TTS_MODELS = {
 }
 DEFAULT_TTS_MODEL = "eleven_flash_v2_5"
 VOICES_MAX_AGE = 600
+SAMPLE_TEXT = "Hi, I'm ZENO. You have three new emails, and your next meeting starts at four."
+
+# How every ElevenLabs voice sounds in ZENO: (lowest, highest, default).
+TUNING = {
+    "speed": (0.7, 1.2, 1.0),  # how fast it talks
+    "stability": (0.0, 1.0, 0.5),  # higher is steadier, lower more emotional
+    "similarity": (0.0, 1.0, 0.75),  # how closely it keeps to the original voice
+    "style": (0.0, 1.0, 0.0),  # more expressive delivery (a little slower to start)
+}
+DEFAULT_TUNING = {name: default for name, (_, _, default) in TUNING.items()}
 
 
 @dataclass
@@ -41,6 +51,17 @@ class Config:
     tts_model: str
     listen: bool
     from_env: bool
+    tuning: dict
+
+
+def _tuning(values: dict | None) -> dict:
+    """Voice tuning with every setting present and within its range."""
+    tuning = dict(DEFAULT_TUNING)
+    for name, value in (values or {}).items():
+        if name in TUNING and isinstance(value, (int, float)):
+            low, high, _ = TUNING[name]
+            tuning[name] = round(min(high, max(low, float(value))), 2)
+    return tuning
 
 
 def config() -> Config:
@@ -51,12 +72,14 @@ def config() -> Config:
             tts_model=saved.get("tts_model") or DEFAULT_TTS_MODEL,
             listen=bool(saved.get("listen")),
             from_env=False,
+            tuning=_tuning(saved.get("tuning")),
         )
     return Config(
         api_key=settings.elevenlabs_api_key,
         tts_model=DEFAULT_TTS_MODEL,
         listen=settings.elevenlabs_listen,
         from_env=True,
+        tuning=dict(DEFAULT_TUNING),
     )
 
 
@@ -70,7 +93,7 @@ def listening() -> bool:
     return bool(cfg.api_key and cfg.listen)
 
 
-def save(*, api_key: str | None, tts_model: str, listen: bool):
+def save(*, api_key: str | None, tts_model: str, listen: bool, tuning: dict | None = None):
     """Save the settings; api_key None keeps the saved key, "" removes it."""
     if tts_model not in TTS_MODELS:
         raise ValueError(f"Unknown ElevenLabs model {tts_model}")
@@ -83,7 +106,13 @@ def save(*, api_key: str | None, tts_model: str, listen: bool):
         stored = llm._encrypt(api_key.strip()) if api_key.strip() else None
     db.put_setting(
         SETTING_KEY,
-        {"api_key": stored, "tts_model": tts_model, "listen": bool(listen), "updated_at": time.time()},
+        {
+            "api_key": stored,
+            "tts_model": tts_model,
+            "listen": bool(listen),
+            "tuning": _tuning(tuning if tuning is not None else current.get("tuning")),
+            "updated_at": time.time(),
+        },
     )
     _voices.clear()
 
@@ -97,6 +126,8 @@ def public() -> dict:
         "listen": cfg.listen,
         "from_env": cfg.from_env,
         "models": [{"id": model, "label": label} for model, label in TTS_MODELS.items()],
+        "tuning": cfg.tuning,
+        "tuning_ranges": {name: {"min": low, "max": high, "default": default} for name, (low, high, default) in TUNING.items()},
     }
 
 
@@ -111,11 +142,21 @@ def _key_id(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()[:12]
 
 
-def _describe(voice: dict) -> str:
+def _name_and_description(voice: dict) -> tuple[str, str]:
+    """A voice's short name and a line about how it sounds.
+
+    ElevenLabs names often carry a tagline ("Adam - Dominant, Firm"); it moves to the description,
+    next to the accent and gender.
+    """
+    full = (voice.get("name") or voice["voice_id"]).strip()
+    name, _, tagline = full.partition(" - ")
     labels = voice.get("labels") or {}
-    parts = [labels.get("accent"), labels.get("gender"), labels.get("descriptive") or labels.get("description")]
-    words = " · ".join(str(p).replace("_", " ") for p in parts if p)
-    return words or (voice.get("category") or "").replace("_", " ").capitalize()
+    parts = [tagline.strip().capitalize() if tagline else labels.get("descriptive")]
+    parts += [labels.get("accent"), labels.get("gender")]
+    words = [str(p).replace("_", " ") for p in parts if p]
+    words = [w[0].upper() + w[1:] for w in words if w]
+    description = " · ".join(words) or (voice.get("category") or "").replace("_", " ").capitalize()
+    return name.strip() or full, description
 
 
 async def _fetch_voices(api_key: str) -> list[dict]:
@@ -124,12 +165,13 @@ async def _fetch_voices(api_key: str) -> list[dict]:
     response.raise_for_status()
     voices = []
     for voice in response.json().get("voices", []):
+        name, description = _name_and_description(voice)
         voices.append(
             {
                 "id": f"elevenlabs:{voice['voice_id']}",
                 "engine": ENGINE,
-                "name": voice.get("name") or voice["voice_id"],
-                "description": _describe(voice),
+                "name": name,
+                "description": description,
                 "preview_url": voice.get("preview_url"),
             }
         )
@@ -155,17 +197,45 @@ async def list_voices() -> list[dict]:
 
 
 async def preview(voice_id: str) -> bytes | None:
-    """ElevenLabs' own MP3 sample of a voice, for previews in the apps."""
-    if voice_id in _previews:
-        return _previews[voice_id]
+    """An MP3 of the voice saying a sample line with ZENO's current model and tuning, so a preview
+    sounds like a call will (or ElevenLabs' own sample if that fails)."""
     voice = next((v for v in await list_voices() if v["id"] == voice_id), None)
-    if not voice or not voice.get("preview_url"):
+    if not voice:
         return None
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        response = await client.get(voice["preview_url"])
-    response.raise_for_status()
-    _previews[voice_id] = response.content
-    return response.content
+    cfg = config()
+    key = f"{voice_id}|{cfg.tts_model}|{sorted(cfg.tuning.items())}"
+    if key in _previews:
+        return _previews[key]
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                f"{API}/text-to-speech/{voice_id.split(':', 1)[1]}",
+                params={"output_format": "mp3_44100_64"},
+                headers={"xi-api-key": cfg.api_key},
+                json={"text": SAMPLE_TEXT, "model_id": cfg.tts_model, "voice_settings": _voice_settings(cfg)},
+            )
+        response.raise_for_status()
+        audio = response.content
+    except httpx.HTTPError as e:
+        logger.warning(f"Couldn't make an ElevenLabs preview, using its own sample: {e}")
+        if not voice.get("preview_url"):
+            return None
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            response = await client.get(voice["preview_url"])
+        response.raise_for_status()
+        audio = response.content
+    _previews[key] = audio
+    return audio
+
+
+def _voice_settings(cfg: Config) -> dict:
+    """The tuning in ElevenLabs' own field names."""
+    return {
+        "speed": cfg.tuning["speed"],
+        "stability": cfg.tuning["stability"],
+        "similarity_boost": cfg.tuning["similarity"],
+        "style": cfg.tuning["style"],
+    }
 
 
 def _rejection(response: httpx.Response) -> str:
@@ -206,7 +276,14 @@ def create_tts(voice: str, text_filters: list) -> ElevenLabsTTSService:
     cfg = config()
     return ElevenLabsTTSService(
         api_key=cfg.api_key,
-        settings=ElevenLabsTTSService.Settings(voice=voice, model=cfg.tts_model),
+        settings=ElevenLabsTTSService.Settings(
+            voice=voice,
+            model=cfg.tts_model,
+            speed=cfg.tuning["speed"],
+            stability=cfg.tuning["stability"],
+            similarity_boost=cfg.tuning["similarity"],
+            style=cfg.tuning["style"],
+        ),
         text_filters=text_filters,
     )
 

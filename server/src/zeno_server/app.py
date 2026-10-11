@@ -633,6 +633,8 @@ class VoiceEngineIn(BaseModel):
     api_key: str | None = Field(default=None, max_length=500)
     tts_model: str = elevenlabs.DEFAULT_TTS_MODEL
     listen: bool = False
+    # speed, stability, similarity, style; None keeps the saved tuning.
+    tuning: dict[str, float] | None = None
 
 
 @app.get("/api/voice-engine")
@@ -644,7 +646,9 @@ async def voice_engine(user: dict = Depends(current_user)):
 @app.put("/api/voice-engine")
 async def save_voice_engine(body: VoiceEngineIn, user: dict = Depends(auth.admin_user)):
     try:
-        elevenlabs.save(api_key=body.api_key, tts_model=body.tts_model, listen=body.listen)
+        elevenlabs.save(
+            api_key=body.api_key, tts_model=body.tts_model, listen=body.listen, tuning=body.tuning
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {**elevenlabs.public(), "admin": True}
