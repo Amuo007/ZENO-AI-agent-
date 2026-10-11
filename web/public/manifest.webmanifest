@@ -1,0 +1,13 @@
+{
+  "name": "ZENO",
+  "short_name": "ZENO",
+  "description": "Your voice-first AI assistant, with a team of Bits on call.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "icons": [
+    { "src": "/icons/zeno-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/zeno-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -1,0 +1,14 @@
+# Cloudflare Tunnel: serves ZENO (dashboard, API, voice signaling) at your hostname.
+#   cloudflared tunnel login
+#   cloudflared tunnel create zeno            # prints the tunnel ID and writes its credentials
+#   cloudflared tunnel route dns zeno zeno.example.com
+#   sudo cloudflared --config /etc/cloudflared/config.yml service install
+# The tunnel carries HTTP only. Voice audio (WebRTC/UDP) needs a TURN relay: set
+# CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN in server/.env (see the README).
+tunnel: <TUNNEL-ID>
+credentials-file: /etc/cloudflared/<TUNNEL-ID>.json
+
+ingress:
+  - hostname: zeno.example.com
+    service: http://localhost:7860
+  - service: http_status:404

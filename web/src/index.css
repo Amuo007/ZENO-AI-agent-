@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+/*
+ * Neutral palette, no brand hue: a whitish light mode and a near-black dark mode, matching the
+ * monochrome ZENO art. Color is kept for meaning only (success, danger, warning).
+ * The theme follows the system unless <html data-theme="light|dark"> overrides it.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", Inter, Roboto, "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", Inter, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-canvas: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-raised: #f0f0f2;
+  --color-sunken: #ebebee;
+  --color-line: #e3e3e6;
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6e73;
+  --color-faint: #a1a1a6;
+  --color-primary: #1d1d1f;
+  --color-on-primary: #ffffff;
+  --color-danger: #d7372f;
+  --color-success: #248a3d;
+  --color-warning: #b25000;
+  --color-glass: rgb(255 255 255 / 0.72);
+  --color-glow: rgb(0 0 0 / 0.07);
+  --color-shadow: rgb(0 0 0 / 0.2);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 12px -4px rgb(0 0 0 / 0.06);
+  --shadow-float: 0 12px 40px -12px rgb(0 0 0 / 0.25);
+}
+
+@layer base {
+  :root[data-theme="dark"] {
+    --color-canvas: #0a0a0b;
+    --color-surface: #161618;
+    --color-raised: #1f1f22;
+    --color-sunken: #111113;
+    --color-line: #2a2a2e;
+    --color-ink: #f5f5f7;
+    --color-muted: #a1a1a6;
+    --color-faint: #6e6e73;
+    --color-primary: #f5f5f7;
+    --color-on-primary: #0a0a0b;
+    --color-danger: #ff6b61;
+    --color-success: #32d74b;
+    --color-warning: #ff9f0a;
+    --color-glass: rgb(22 22 24 / 0.72);
+    --color-glow: rgb(255 255 255 / 0.10);
+    --color-shadow: rgb(0 0 0 / 0.7);
+    --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 2px 12px -4px rgb(0 0 0 / 0.5);
+    --shadow-float: 0 12px 40px -12px rgb(0 0 0 / 0.8);
+    color-scheme: dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-canvas: #0a0a0b;
+      --color-surface: #161618;
+      --color-raised: #1f1f22;
+      --color-sunken: #111113;
+      --color-line: #2a2a2e;
+      --color-ink: #f5f5f7;
+      --color-muted: #a1a1a6;
+      --color-faint: #6e6e73;
+      --color-primary: #f5f5f7;
+      --color-on-primary: #0a0a0b;
+      --color-danger: #ff6b61;
+      --color-success: #32d74b;
+      --color-warning: #ff9f0a;
+      --color-glass: rgb(22 22 24 / 0.72);
+      --color-glow: rgb(255 255 255 / 0.10);
+      --color-shadow: rgb(0 0 0 / 0.7);
+    --color-shadow: rgb(0 0 0 / 0.7);
+      --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 2px 12px -4px rgb(0 0 0 / 0.5);
+      --shadow-float: 0 12px 40px -12px rgb(0 0 0 / 0.8);
+      color-scheme: dark;
+    }
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-ink) 45%, transparent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-ink) 18%, transparent);
+  }
+}
+
+/* --- Avatars --------------------------------------------------------------------------------- */
+
+/* The art is white on transparent; a soft contour keeps the halo and glow visible on white. */
+.avatar-art {
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.28)) drop-shadow(0 8px 18px rgb(0 0 0 / 0.10));
+}
+:root[data-theme="dark"] .avatar-art {
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.55));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .avatar-art {
+    filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.55));
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; transform: scale(0.96); }
+  50% { opacity: 0.7; transform: scale(1.04); }
+}
+@keyframes ripple {
+  from { opacity: 0.5; transform: scale(0.8); }
+  to { opacity: 0; transform: scale(1.5); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-4px) rotate(1.5deg); }
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ZENO blinks now and then: a lid the color of the visor drops over each eye for a moment. */
+@keyframes blink {
+  0%, 92%, 100% { transform: scaleY(0); }
+  95% { transform: scaleY(1); }
+}
+.zeno-lid {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  transform: scaleY(0);
+  animation: blink 5.6s ease-in-out infinite;
+}
+/* Poses trade places with a soft crossfade and a small settle, rather than a hard cut. */
+.zeno-pose {
+  transition: opacity 380ms ease, transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes badge-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-badge { animation: badge-pop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+.animate-float { animation: float 4.5s ease-in-out infinite; }
+.animate-bob { animation: bob 1.6s ease-in-out infinite; }
+.animate-breathe { animation: breathe 2.4s ease-in-out infinite; }
+.animate-ripple { animation: ripple 1.8s ease-out infinite; }
+.animate-rise { animation: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--color-muted) 0%, var(--color-ink) 50%, var(--color-muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float, .animate-bob, .animate-breathe, .animate-ripple, .shimmer-text, .zeno-lid {
+    animation: none;
+  }
+}
+
+/* Thin, unobtrusive scrollbars. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}

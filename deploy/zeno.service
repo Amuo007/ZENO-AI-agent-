@@ -1,0 +1,23 @@
+# systemd unit for the ZENO server on a Linux VM.
+#   sudo cp deploy/zeno.service /etc/systemd/system/ && sudo systemctl enable --now zeno
+# Assumes the repo is at /opt/zeno, run as user "zeno" (in the "docker" group so Bits get
+# sandboxes), with its data on a persistent disk at /var/lib/zeno.
+[Unit]
+Description=ZENO voice assistant
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=zeno
+WorkingDirectory=/opt/zeno/server
+Environment=DATA_DIR=/var/lib/zeno
+# Behind a Cloudflare Tunnel, listen on localhost only; cloudflared connects to it.
+Environment=ZENO_HOST=127.0.0.1
+# Code in Bit sandboxes reaches ZENO (to use your apps) through the tunnel's public address.
+Environment=BIT_GATEWAY_URL=https://zeno.example.com
+ExecStart=/opt/zeno/server/.venv/bin/zeno-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
